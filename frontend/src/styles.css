@@ -29,71 +29,85 @@ body {
   min-height: 100vh;
 }
 
-.layout {
-  display: grid;
-  grid-template-columns: 220px 1fr;
-  min-height: 100vh;
-}
-.side {
-  background: linear-gradient(180deg, var(--navy), var(--navy-mid));
-  color: #f3efe6;
-  padding: 24px 18px;
+.app-shell {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  min-height: 100vh;
 }
-.brand .mark {
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 0 24px;
+  height: 60px;
+  background: linear-gradient(180deg, var(--navy), var(--navy-mid));
+  color: #f3efe6;
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  box-shadow: 0 2px 10px rgba(11, 31, 51, 0.25);
+}
+.topbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+.topbar-brand .mark {
   display: inline-block;
   background: var(--accent);
   color: var(--navy);
   font-weight: 700;
   padding: 2px 8px;
   border-radius: 4px;
-  margin-bottom: 8px;
 }
-.brand strong { display: block; font-size: 1.35rem; letter-spacing: 0.04em; }
-.brand small { color: #b8c4d1; }
-.side nav { display: flex; flex-direction: column; gap: 8px; }
-.nav-secondary {
+.topbar-brand strong { font-size: 1.15rem; letter-spacing: 0.04em; }
+.topbar-brand small { color: #b8c4d1; }
+.topbar-nav {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding-top: 8px;
-  border-top: 1px solid rgba(243, 239, 230, 0.18);
+  align-items: center;
+  gap: 6px;
+  flex: 1;
 }
-.nav-sec-label {
-  margin: 0 0 4px;
-  font-size: 0.75rem;
-  letter-spacing: 0.08em;
-  color: #8fa0b3;
-  text-transform: uppercase;
-}
-.side a {
+.topbar-nav a {
   color: #e8eef5;
   text-decoration: none;
-  padding: 10px 12px;
+  padding: 8px 14px;
   border-radius: 8px;
+  font-size: 0.95rem;
 }
-.nav-secondary a {
-  padding: 7px 12px;
-  font-size: 0.92rem;
-  color: #b8c4d1;
-}
-.side a.router-link-active,
-.side a:hover {
+.topbar-nav a.router-link-active,
+.topbar-nav a:hover {
   background: rgba(196, 163, 90, 0.22);
   color: #fff8e7;
 }
+.topbar-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+}
+.role-chip {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.role-admin { background: var(--accent); color: var(--navy); }
+.role-worker { background: rgba(232, 238, 245, 0.18); color: #e8eef5; }
+.topbar-username { color: #b8c4d1; font-size: 0.9rem; }
 .linkish {
-  margin-top: auto;
   background: transparent;
   border: 1px solid rgba(243, 239, 230, 0.35);
   color: #f3efe6;
   border-radius: 8px;
-  padding: 8px 10px;
+  padding: 6px 12px;
   cursor: pointer;
+  font: inherit;
 }
-.content { padding: 28px 32px; max-width: 1200px; }
+.content { padding: 28px 32px; max-width: 1200px; width: 100%; margin: 0 auto; }
 
 h1 { margin: 0 0 8px; font-weight: 700; }
 .sub { margin: 0 0 20px; color: var(--muted); }
@@ -402,7 +416,47 @@ th { background: var(--canvas-deep); color: var(--navy); }
 .drawer-form label { min-width: 0; }
 .drawer-form input { min-width: 0; width: 100%; }
 
+.drawer-cooldown {
+  padding: 14px 16px;
+  margin: 0;
+  border-style: dashed;
+  background: rgba(243, 230, 196, 0.45);
+}
+.checkline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 1rem;
+  color: var(--navy);
+  cursor: pointer;
+}
+.checkline input {
+  min-width: 0;
+  width: 18px;
+  height: 18px;
+  accent-color: var(--navy);
+  cursor: pointer;
+}
+.checkline input:disabled { cursor: not-allowed; }
+.cool-dot {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  line-height: 20px;
+  border-radius: 50%;
+  background: var(--ok);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+.roll-chip.cool-ok { border-color: var(--ok); }
+
 @media (max-width: 800px) {
-  .layout { grid-template-columns: 1fr; }
+  .topbar { gap: 12px; padding: 0 14px; height: auto; min-height: 56px; flex-wrap: wrap; }
+  .topbar-brand small { display: none; }
+  .topbar-nav { flex: 1 1 100%; order: 3; padding-bottom: 8px; }
   .content { padding: 18px 16px; }
 }

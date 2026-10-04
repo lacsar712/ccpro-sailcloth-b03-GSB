@@ -107,6 +107,7 @@ onMounted(load)
           <th>帆布间</th>
           <th>卷号</th>
           <th>状态</th>
+          <th>冷却已满</th>
           <th>克重</th>
           <th>备注</th>
           <th></th>
@@ -117,6 +118,7 @@ onMounted(load)
           <td>{{ row.loftName }}</td>
           <td>{{ row.rollCode }}</td>
           <td><span class="badge" :class="'badge-' + row.status">{{ statusLabel[row.status] || row.status }}</span></td>
+          <td>{{ row.status === 'dipping' ? (row.coolDownFull ? '是' : '否') : '—' }}</td>
           <td>{{ row.fabricWeightGsm }}</td>
           <td>{{ row.notes }}</td>
           <td><button class="btn secondary" type="button" @click="startEdit(row)">编辑</button></td>

@@ -1,6 +1,10 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import api from '../api'
+import { useAuthStore } from '../stores/auth'
+
+const auth = useAuthStore()
+const isAdmin = computed(() => auth.user?.role === 'admin')
 
 const lofts = ref([])
 const rolls = ref([])
@@ -9,6 +13,8 @@ const error = ref('')
 const panelError = ref('')
 const selectedId = ref(null)
 const panelBusy = ref(false)
+const coolBusy = ref(false)
+const coolFull = ref(false)
 
 const statusLabel = { raw: '原布', dipping: '浸渍中', cured: '已固化' }
 
@@ -26,6 +32,13 @@ function localNow() {
 }
 
 const selected = computed(() => rolls.value.find((r) => r.id === selectedId.value) || null)
+
+watch(
+  [selectedId, () => selected.value?.coolDownFull],
+  () => {
+    coolFull.value = !!selected.value?.coolDownFull
+  }
+)
 
 const rollsByLoft = computed(() => {
   return lofts.value.map((loft) => ({
@@ -76,16 +89,47 @@ async function setStatus(status) {
   panelError.value = ''
   panelBusy.value = true
   try {
-    await api.patch(`/rolls/${selected.value.id}/`, { status })
+    if (status === 'raw' && selected.value.status === 'dipping') {
+      // 浸渍中拨回原布走专页动作：后端按冷却闸门做条件更新，
+      // 未勾 400、并发第二笔 409。
+      await api.post(`/rolls/${selected.value.id}/revert_to_raw/`)
+    } else {
+      await api.patch(`/rolls/${selected.value.id}/`, { status })
+    }
     await load()
   } catch (e) {
     const data = e.response?.data
     panelError.value =
       data?.status?.[0] ||
       data?.detail ||
-      '状态更新失败（标「已固化」需最近浸渍固化时长 ≥ 12 小时）'
+      '状态更新失败（标「已固化」需最近浸渍固化时长 ≥ 12 小时；浸渍中拨回原布需先勾选冷却已满）'
   } finally {
     panelBusy.value = false
+  }
+}
+
+async function toggleCoolDown(full) {
+  if (!selected.value || !isAdmin.value) return
+  panelError.value = ''
+  coolBusy.value = true
+  // 先乐观更新；失败或非预期响应时回退到服务端值。
+  const previous = coolFull.value
+  coolFull.value = full
+  try {
+    const { data } = await api.post(
+      `/rolls/${selected.value.id}/set_cool_down/`,
+      { full }
+    )
+    const idx = rolls.value.findIndex((r) => r.id === data.id)
+    if (idx !== -1) rolls.value[idx] = data
+    coolFull.value = !!data.coolDownFull
+  } catch (e) {
+    coolFull.value = previous
+    const data = e.response?.data
+    panelError.value =
+      data?.full?.[0] || data?.detail || '冷却确认失败'
+  } finally {
+    coolBusy.value = false
   }
 }
 
@@ -94,6 +138,7 @@ async function logDip() {
   panelError.value = ''
   panelBusy.value = true
   try {
+    // 冷却不拦浸渍登记；原布登记浸渍后由后端自动转为浸渍中并重置冷却勾选。
     await api.post('/dips/', {
       rollId: selected.value.id,
       startedAt: new Date(dipForm.startedAt).toISOString(),
@@ -104,13 +149,6 @@ async function logDip() {
           : dipForm.cureHours,
       notes: dipForm.notes,
     })
-    if (selected.value.status === 'raw') {
-      try {
-        await api.patch(`/rolls/${selected.value.id}/`, { status: 'dipping' })
-      } catch {
-        /* 浸渍已记；状态跟进失败不阻断 */
-      }
-    }
     dipForm.cureHours = ''
     dipForm.notes = ''
     dipForm.startedAt = localNow()
@@ -133,7 +171,7 @@ onMounted(load)
     <header class="rack-head">
       <div>
         <h1>帆布间晾晒架</h1>
-        <p class="sub">按帆布间挂卷；点选布卷登记浸渍或标固化。固化规则：最近浸渍时长 ≥ 12 小时。</p>
+        <p class="sub">按帆布间挂卷；点选布卷登记浸渍或标固化。固化规则：最近浸渍时长 ≥ 12 小时。浸渍中卷须由管理员在专页勾选「冷却已满」方可拨回原布。</p>
       </div>
       <button class="btn secondary" type="button" @click="load">刷新架面</button>
     </header>
@@ -159,6 +197,7 @@ onMounted(load)
             :class="[
               'chip-' + roll.status,
               { 'is-selected': selectedId === roll.id },
+              { 'cool-ok': roll.status === 'dipping' && roll.coolDownFull },
             ]"
             @click="openRoll(roll)"
           >
@@ -166,6 +205,7 @@ onMounted(load)
             <span class="hang-tag" :class="'tag-' + roll.status">
               {{ statusLabel[roll.status] || roll.status }}
             </span>
+            <span v-if="roll.status === 'dipping' && roll.coolDownFull" class="cool-dot" title="冷却已满">凉</span>
             <span class="chip-code">{{ roll.rollCode }}</span>
             <span class="chip-gsm">{{ roll.fabricWeightGsm }} gsm</span>
           </button>
@@ -211,6 +251,24 @@ onMounted(load)
         <span class="hint">{{ selected.fabricWeightGsm }} gsm</span>
       </div>
       <p v-if="selected.notes" class="hint">{{ selected.notes }}</p>
+
+      <!-- 冷却闸门：仅浸渍中显示；已固化不看此勾。管理员可勾，操作工只读。 -->
+      <div v-if="selected.status === 'dipping'" class="drawer-cooldown panel">
+        <label class="checkline">
+          <input
+            v-model="coolFull"
+            type="checkbox"
+            :disabled="!isAdmin || panelBusy || coolBusy"
+            @change="toggleCoolDown($event.target.checked)"
+          />
+          <span>冷却已满</span>
+        </label>
+        <p class="hint" style="margin:0">
+          <template v-if="isAdmin">勾选确认冷却已满后，方可把该卷拨回原布；再次登记浸渍将重置此勾选。</template>
+          <template v-else>冷却确认仅管理员可操作；冷却未满时拨回原布会被拒绝。</template>
+        </p>
+      </div>
+
       <p v-if="panelError" class="error">{{ panelError }}</p>
 
       <div class="drawer-actions">
@@ -218,6 +276,7 @@ onMounted(load)
           class="btn secondary"
           type="button"
           :disabled="panelBusy || selected.status === 'raw'"
+          :title="selected.status === 'dipping' && !selected.coolDownFull ? '冷却未满，拨回将被拒绝' : ''"
           @click="setStatus('raw')"
         >
           标为原布

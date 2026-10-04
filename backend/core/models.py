@@ -27,6 +27,9 @@ class ClothRoll(models.Model):
     loft = models.ForeignKey(Loft, on_delete=models.CASCADE, related_name="rolls")
     roll_code = models.CharField(max_length=40)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_RAW)
+    # 浸渍中卷冷却是否已满：仅管理员可在布卷专页勾选；未勾不得拨回原布。
+    # 已固化不看此标记；再次登记浸渍时重置为未满。
+    cool_down_full = models.BooleanField(default=False, verbose_name="冷却已满")
     fabric_weight_gsm = models.PositiveIntegerField(default=380)
     notes = models.TextField(blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)

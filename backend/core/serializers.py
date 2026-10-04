@@ -1,4 +1,7 @@
 from rest_framework import serializers
+from rest_framework.exceptions import PermissionDenied
+
+from accounts.models import User
 
 from .models import ClothRoll, DipRun, Loft
 from .rules import can_mark_roll_cured
@@ -22,6 +25,7 @@ class ClothRollSerializer(serializers.ModelSerializer):
     loftId = serializers.PrimaryKeyRelatedField(source="loft", queryset=Loft.objects.all())
     rollCode = serializers.CharField(source="roll_code")
     fabricWeightGsm = serializers.IntegerField(source="fabric_weight_gsm", required=False)
+    coolDownFull = serializers.BooleanField(source="cool_down_full", required=False)
     loftName = serializers.CharField(source="loft.name", read_only=True)
 
     class Meta:
@@ -32,6 +36,7 @@ class ClothRollSerializer(serializers.ModelSerializer):
             "loftName",
             "rollCode",
             "status",
+            "coolDownFull",
             "fabricWeightGsm",
             "notes",
             "created_at",
@@ -40,6 +45,22 @@ class ClothRollSerializer(serializers.ModelSerializer):
         read_only_fields = ("id", "loftName", "created_at", "updated_at")
 
     def validate(self, attrs):
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+
+        # 「冷却已满」只能由管理员勾选；操作工只读。
+        if "cool_down_full" in attrs and user is not None:
+            if user.role != User.ROLE_ADMIN:
+                raise PermissionDenied("仅管理员可在布卷专页勾选「冷却已满」")
+            if (
+                attrs["cool_down_full"]
+                and attrs.get("status", getattr(self.instance, "status", None))
+                != ClothRoll.STATUS_DIPPING
+            ):
+                raise serializers.ValidationError(
+                    {"coolDownFull": "仅浸渍中的布卷需要确认冷却已满"}
+                )
+
         loft = attrs.get("loft") or getattr(self.instance, "loft", None)
         roll_code = attrs.get("roll_code") or getattr(self.instance, "roll_code", None)
         if loft and roll_code:
@@ -50,16 +71,16 @@ class ClothRollSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({"rollCode": "同一帆布间卷号必须唯一"})
 
         new_status = attrs.get("status")
-        if new_status == ClothRoll.STATUS_CURED:
-            roll = self.instance
-            if roll is None:
-                raise serializers.ValidationError(
-                    {"status": "新建布卷不能直接设为已固化"}
-                )
-            # 合并未提交字段到临时视角：用当前实例校验
-            ok, msg = can_mark_roll_cured(roll)
-            if not ok:
-                raise serializers.ValidationError({"status": msg})
+        if new_status is not None and self.instance is not None:
+            if new_status == ClothRoll.STATUS_CURED:
+                # 标已固化只看最近浸渍固化时长，不看冷却勾选。
+                ok, msg = can_mark_roll_cured(self.instance)
+                if not ok:
+                    raise serializers.ValidationError({"status": msg})
+            # 浸渍中 -> 原布的冷却闸门不在这里按可能陈旧的快照判断，
+            # 统一交给 views.perform_update 中基于数据库当前状态的条件 UPDATE。
+        elif new_status == ClothRoll.STATUS_CURED:
+            raise serializers.ValidationError({"status": "新建布卷不能直接设为已固化"})
         return attrs
 
 
