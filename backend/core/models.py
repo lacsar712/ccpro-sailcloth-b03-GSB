@@ -27,6 +27,7 @@ class ClothRoll(models.Model):
     loft = models.ForeignKey(Loft, on_delete=models.CASCADE, related_name="rolls")
     roll_code = models.CharField(max_length=40)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_RAW)
+    cooling_done = models.BooleanField(default=False)
     fabric_weight_gsm = models.PositiveIntegerField(default=380)
     notes = models.TextField(blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)

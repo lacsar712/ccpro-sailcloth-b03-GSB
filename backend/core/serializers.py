@@ -1,7 +1,16 @@
 from rest_framework import serializers
+from rest_framework.exceptions import PermissionDenied
 
 from .models import ClothRoll, DipRun, Loft
-from .rules import can_mark_roll_cured
+from .rules import can_mark_roll_cured, can_return_roll_to_raw
+
+
+def _is_admin(user) -> bool:
+    return bool(
+        user
+        and user.is_authenticated
+        and (getattr(user, "role", None) == "admin" or user.is_superuser)
+    )
 
 
 class LoftSerializer(serializers.ModelSerializer):
@@ -22,6 +31,7 @@ class ClothRollSerializer(serializers.ModelSerializer):
     loftId = serializers.PrimaryKeyRelatedField(source="loft", queryset=Loft.objects.all())
     rollCode = serializers.CharField(source="roll_code")
     fabricWeightGsm = serializers.IntegerField(source="fabric_weight_gsm", required=False)
+    coolingDone = serializers.BooleanField(source="cooling_done", required=False)
     loftName = serializers.CharField(source="loft.name", read_only=True)
 
     class Meta:
@@ -32,6 +42,7 @@ class ClothRollSerializer(serializers.ModelSerializer):
             "loftName",
             "rollCode",
             "status",
+            "coolingDone",
             "fabricWeightGsm",
             "notes",
             "created_at",
@@ -49,6 +60,14 @@ class ClothRollSerializer(serializers.ModelSerializer):
             if qs.exists():
                 raise serializers.ValidationError({"rollCode": "同一帆布间卷号必须唯一"})
 
+        # 「冷却已满」勾选仅管理员可改动；操作工只读
+        if "cooling_done" in attrs:
+            current = getattr(self.instance, "cooling_done", False)
+            if attrs["cooling_done"] != current:
+                request = self.context.get("request")
+                if not _is_admin(getattr(request, "user", None)):
+                    raise PermissionDenied("仅管理员可勾选或取消「冷却已满」")
+
         new_status = attrs.get("status")
         if new_status == ClothRoll.STATUS_CURED:
             roll = self.instance
@@ -58,6 +77,14 @@ class ClothRollSerializer(serializers.ModelSerializer):
                 )
             # 合并未提交字段到临时视角：用当前实例校验
             ok, msg = can_mark_roll_cured(roll)
+            if not ok:
+                raise serializers.ValidationError({"status": msg})
+        if (
+            new_status == ClothRoll.STATUS_RAW
+            and self.instance is not None
+            and self.instance.status == ClothRoll.STATUS_DIPPING
+        ):
+            ok, msg = can_return_roll_to_raw(self.instance)
             if not ok:
                 raise serializers.ValidationError({"status": msg})
         return attrs

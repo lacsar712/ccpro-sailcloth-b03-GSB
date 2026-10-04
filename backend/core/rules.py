@@ -29,3 +29,17 @@ def can_mark_roll_cured(roll: ClothRoll) -> tuple[bool, str]:
             f"最近浸渍固化时长 {latest.cure_hours} 小时低于 {MIN_CURE_HOURS_FOR_CURED} 小时，不能标记为已固化",
         )
     return True, ""
+
+
+def can_return_roll_to_raw(roll: ClothRoll) -> tuple[bool, str]:
+    """
+    布卷拨回「原布」(raw) 的前提：
+    仅当卷处于「浸渍中」时受冷却约束——专页「冷却已满」必须已勾选。
+    标「已固化」及已固化卷拨回均不看这勾。
+    """
+    if roll.status == ClothRoll.STATUS_DIPPING and not roll.cooling_done:
+        return (
+            False,
+            "冷却未满：浸渍中的布卷须由管理员在冷却勾专页勾选「冷却已满」后才能拨回原布",
+        )
+    return True, ""

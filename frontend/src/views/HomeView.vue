@@ -83,7 +83,7 @@ async function setStatus(status) {
     panelError.value =
       data?.status?.[0] ||
       data?.detail ||
-      '状态更新失败（标「已固化」需最近浸渍固化时长 ≥ 12 小时）'
+      '状态更新失败（标「已固化」需最近浸渍固化时长 ≥ 12 小时；浸渍中拨回原布需冷却已满）'
   } finally {
     panelBusy.value = false
   }
@@ -210,6 +210,9 @@ onMounted(load)
         </span>
         <span class="hint">{{ selected.fabricWeightGsm }} gsm</span>
       </div>
+      <p v-if="selected.status === 'dipping'" class="hint">
+        冷却已满：{{ selected.coolingDone ? '已勾' : '未勾' }}。未勾「冷却已满」不得拨回原布（管理员在「冷却勾」专页勾选）。
+      </p>
       <p v-if="selected.notes" class="hint">{{ selected.notes }}</p>
       <p v-if="panelError" class="error">{{ panelError }}</p>
 
